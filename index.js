@@ -52,5 +52,6 @@ app.get("/", (req, res) => {
 });
 
 // ===== START SERVER =====
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// ⚠️ NOTE: NO app.listen(), NO http.createServer()
+// Vercel akan handle server
+export default app;
