@@ -1,14 +1,12 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import http from "http";
 import admin from "firebase-admin";
 import userRoutes from "./routes/users.js";
 import jobRoutes from "./routes/jobs.js";
 import chatRoutes from "./routes/chats.js";
 import conversationsRouter from "./routes/conversations.js";
 import publicRoutes from "./routes/public.js";
-import { initSocket } from "./socket.js";
 import testRoutes from "./routes/test.js";
 import stripeRoutes from "./routes/stripe.js";
 import hiresRouter from "./routes/hires.js";
@@ -29,7 +27,12 @@ if (!admin.apps.length) {
 
 // ===== EXPRESS APP =====
 const app = express();
-app.use(cors({ origin: "*" }));
+
+// CORS configuration for Vercel
+app.use(cors({ 
+  origin: process.env.FRONTEND_URL || "*",
+  credentials: true 
+}));
 
 app.use(express.json());
 
@@ -43,15 +46,25 @@ app.use("/api/test", testRoutes);
 app.use("/api/stripe", stripeRoutes);
 app.use("/api/hires", hiresRouter);
 
-// ===== HTTP SERVER + SOCKET.IO =====
-const server = http.createServer(app);
-const io = initSocket(server, admin); // <-- init socket with firebase admin
-
+// Health check endpoint
 app.get("/", (req, res) => {
-  res.send({ message: "Yes connected" });
+  res.json({ message: "API is running", status: "ok" });
 });
 
-// ===== START SERVER =====
-// ⚠️ NOTE: NO app.listen(), NO http.createServer()
-// Vercel akan handle server
+app.get("/api", (req, res) => {
+  res.json({ message: "Yes connected" });
+});
+
+// ===== VERCEL SERVERLESS EXPORT =====
+// For Vercel, export the Express app
 export default app;
+
+// ===== LOCAL DEVELOPMENT SERVER =====
+// Only run server if not in Vercel environment
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+  });
+}
