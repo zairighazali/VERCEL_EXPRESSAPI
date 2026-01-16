@@ -1,7 +1,8 @@
 import express from "express";
-import stripe from "../services/stripe.js";
+import Stripe from "stripe";
 
 const router = express.Router();
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 router.get("/stripe", async (req, res) => {
   try {

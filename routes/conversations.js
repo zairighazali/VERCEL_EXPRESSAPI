@@ -1,8 +1,7 @@
-// routes/conversations.js - STANDARDIZED
+// routes/conversations.js - VERCEL COMPATIBLE (No Socket.IO)
 import express from "express";
 import { pool } from "../db.js";
 import { verifyToken } from "../middleware/auth.js";
-import { sendMessageToUser } from "../socket.js";
 
 const router = express.Router();
 
@@ -14,7 +13,6 @@ router.get("/", verifyToken, async (req, res) => {
   try {
     const { uid } = req.user;
 
-    // Get user's internal ID
     const userRes = await pool.query(
       "SELECT id FROM users WHERE firebase_uid = $1",
       [uid],
@@ -26,7 +24,6 @@ router.get("/", verifyToken, async (req, res) => {
 
     const userId = userRes.rows[0].id;
 
-    // Get conversations with other user info and last message
     const result = await pool.query(
       `SELECT 
         c.id AS conversation_id,
@@ -79,7 +76,6 @@ router.post("/start", verifyToken, async (req, res) => {
       });
     }
 
-    // Get both users' internal IDs
     const usersRes = await pool.query(
       "SELECT id, firebase_uid FROM users WHERE firebase_uid = ANY($1::text[])",
       [[uid, other_uid]],
@@ -97,7 +93,6 @@ router.post("/start", verifyToken, async (req, res) => {
     const myId = userMap[uid];
     const otherId = userMap[other_uid];
 
-    // Find or create conversation
     let convRes = await pool.query(
       `SELECT * FROM conversations
        WHERE (user_a = $1 AND user_b = $2) 
@@ -118,7 +113,6 @@ router.post("/start", verifyToken, async (req, res) => {
       conversation = insertRes.rows[0];
     }
 
-    // Get other user details
     const otherUserRes = await pool.query(
       `SELECT 
         id,
@@ -150,7 +144,6 @@ router.get("/:id/messages", verifyToken, async (req, res) => {
     const { uid } = req.user;
     const { id } = req.params;
 
-    // Get user's internal ID
     const userRes = await pool.query(
       "SELECT id FROM users WHERE firebase_uid = $1",
       [uid],
@@ -162,7 +155,6 @@ router.get("/:id/messages", verifyToken, async (req, res) => {
 
     const userId = userRes.rows[0].id;
 
-    // Verify user is part of conversation
     const convRes = await pool.query(
       `SELECT * FROM conversations
        WHERE id = $1 
@@ -176,7 +168,6 @@ router.get("/:id/messages", verifyToken, async (req, res) => {
       });
     }
 
-    // Get messages
     const messagesRes = await pool.query(
       `SELECT 
         m.id,
@@ -204,6 +195,7 @@ router.get("/:id/messages", verifyToken, async (req, res) => {
 /**
  * POST /api/conversations/:id/messages
  * Send a message in a conversation
+ * Note: Without Socket.IO, clients need to poll for new messages
  */
 router.post("/:id/messages", verifyToken, async (req, res) => {
   try {
@@ -215,7 +207,6 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
       return res.status(400).json({ message: "Message content is required" });
     }
 
-    // Get user's internal ID
     const userRes = await pool.query(
       "SELECT id FROM users WHERE firebase_uid = $1",
       [uid],
@@ -227,7 +218,6 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
 
     const userId = userRes.rows[0].id;
 
-    // Verify user is part of conversation and get other user
     const convRes = await pool.query(
       `SELECT user_a, user_b FROM conversations
        WHERE id = $1 
@@ -241,13 +231,6 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
       });
     }
 
-    const conversation = convRes.rows[0];
-    const otherUserId =
-      conversation.user_a === userId
-        ? conversation.user_b
-        : conversation.user_a;
-
-    // Insert message
     const messageRes = await pool.query(
       `INSERT INTO messages (conversation_id, sender_id, content)
        VALUES ($1, $2, $3)
@@ -257,7 +240,6 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
 
     const message = messageRes.rows[0];
 
-    // Get sender details for response
     const senderRes = await pool.query(
       `SELECT 
         id,
@@ -269,12 +251,6 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
       [userId],
     );
 
-    // Get receiver's firebase_uid for socket
-    const receiverRes = await pool.query(
-      "SELECT firebase_uid FROM users WHERE id = $1",
-      [otherUserId],
-    );
-
     const responseMessage = {
       id: message.id,
       conversation_id: message.conversation_id,
@@ -282,14 +258,6 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
       created_at: message.created_at,
       sender: senderRes.rows[0],
     };
-
-    // Emit via socket
-    if (receiverRes.rows[0]) {
-      sendMessageToUser(receiverRes.rows[0].firebase_uid, {
-        type: "new_message",
-        message: responseMessage,
-      });
-    }
 
     res.status(201).json(responseMessage);
   } catch (err) {
@@ -300,14 +268,13 @@ router.post("/:id/messages", verifyToken, async (req, res) => {
 
 /**
  * DELETE /api/conversations/:id
- * Delete a conversation (both users can delete)
+ * Delete a conversation
  */
 router.delete("/:id", verifyToken, async (req, res) => {
   try {
     const { uid } = req.user;
     const { id } = req.params;
 
-    // Get user's internal ID
     const userRes = await pool.query(
       "SELECT id FROM users WHERE firebase_uid = $1",
       [uid],
@@ -319,7 +286,6 @@ router.delete("/:id", verifyToken, async (req, res) => {
 
     const userId = userRes.rows[0].id;
 
-    // Delete conversation (will cascade delete messages)
     const result = await pool.query(
       `DELETE FROM conversations
        WHERE id = $1 

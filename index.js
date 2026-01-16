@@ -4,7 +4,6 @@ import dotenv from "dotenv";
 import admin from "firebase-admin";
 import userRoutes from "./routes/users.js";
 import jobRoutes from "./routes/jobs.js";
-import chatRoutes from "./routes/chats.js";
 import conversationsRouter from "./routes/conversations.js";
 import publicRoutes from "./routes/public.js";
 import testRoutes from "./routes/test.js";
@@ -19,16 +18,15 @@ if (!admin.apps.length) {
     credential: admin.credential.cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
     }),
-    databaseURL: process.env.FIREBASE_DATABASE_URL,
   });
 }
 
 // ===== EXPRESS APP =====
 const app = express();
 
-// CORS configuration for Vercel
+// CORS configuration
 app.use(cors({ 
   origin: process.env.FRONTEND_URL || "*",
   credentials: true 
@@ -39,14 +37,13 @@ app.use(express.json());
 // ===== ROUTES =====
 app.use("/api/users", userRoutes);
 app.use("/api/jobs", jobRoutes);
-app.use("/api/chats", chatRoutes);
 app.use("/api/conversations", conversationsRouter);
 app.use("/api/public", publicRoutes);
 app.use("/api/test", testRoutes);
 app.use("/api/stripe", stripeRoutes);
 app.use("/api/hires", hiresRouter);
 
-// Health check endpoint
+// Health check endpoints
 app.get("/", (req, res) => {
   res.json({ message: "API is running", status: "ok" });
 });
@@ -56,11 +53,9 @@ app.get("/api", (req, res) => {
 });
 
 // ===== VERCEL SERVERLESS EXPORT =====
-// For Vercel, export the Express app
 export default app;
 
 // ===== LOCAL DEVELOPMENT SERVER =====
-// Only run server if not in Vercel environment
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
